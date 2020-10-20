@@ -1,0 +1,126 @@
+---
+title: "Multiple Linear Regression Model of GSS Data"
+author: "Jo-Yen Lin"
+date: "October 19th, 2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(readr)
+library(tidyverse)
+library(knitr)
+```
+Code and data supporting this analysis is available at: https://github.com/jlin213/Multiple-Linear-Regression-Of-GSS-Data
+
+## Abstract
+  Multiple Linear Regression Model allows statisticians to explore the relationship between two or more independent variables and one continuous variables. In this study, General Social Survey (GSS) conducted by Statistics Canada in 2017 is used to investigate the relationship between Canadians' income, age, marriage, and number of children. Through the multiple linear regression model, the study concludes that married Canadians generally have more children as they are older, regardless of income. However, income affects at which age Canadians to have more children when they are single. 
+
+## Introduction
+
+  The General Social Survey (GSS) that conducts annually in 10 provinces of Canada provides insightful data to social and cultural trend of Canadians. This study is interested in how we can predict the age of Canadians through total number of children, their income, and their marital status. By examining the relationship of these variables, we can investigate the question such as "For Canadians with 2 children, what age does people achieve different income brackets?" or "Does marital status affect how many children people have at different stages of life?" Through the multiple linear regression model that will be introduced later, this study will answer all the preceding questions. Then, results, weakness, and improvements of the model will be discussed to conclude this analysis. 
+
+## Data
+
+  The data was collected by Statistics Canada through General Social Survey (GSS) from February 1st to November 30, 2017 through telephone interviews and participation was voluntary. The population is targeted at all Canadians who are 15 years old or older and living in the 10 provinces. From Statistics Canada, "the GSS uses a frame that combines landline and cellular telephone numbers from the Census and various administrative sources with Statistics Canada's dwelling frame" (Government of Canada, 2020). Additionally, only one person from each household is selected. The key features of the survey include large sample size (43,000 people for year 2017), with diverse characteristics of childhood, immigration status, marriage, education background. GSS allows research in marriage and family to have extensive data. It also helps with investigating how Canadian families are facing changes at the current year compared to other years. This study chooses the 2017 data set, in particular, to have a fresh and most recent data of the social and family life of Canadians who participated in the survey. 
+  
+```{r, include=FALSE}
+# import clean data from gss_cleaning.R provided
+clean_data <- read_csv("gss.csv")
+clean_data <- clean_data %>% select("income_respondent","place_birth_canada","age","total_children", "marital_status") %>% drop_na()
+clean_data$income_respondent <- ordered(clean_data$income_respondent)
+# Combining marital status
+clean_data$marital_status[clean_data$marital_status %in% c("Divorced", "Living common-law", "Separated", "Widowed", "Married")] <- "Married"
+clean_data$marital_status <- as.factor(clean_data$marital_status)
+clean_data$place_birth_canada <- as.factor(clean_data$place_birth_canada)
+income_factor <- as.factor(clean_data$income_respondent) 
+# Fix typo in income_respondent and order level
+levels(income_factor) <- c(levels(income_factor), "$100,000 to $124,999")
+income_factor[income_factor == "$100,000 to $ 124,999"] <- "$100,000 to $124,999"
+droplevels(income_factor)
+color_factor <- ordered(income_factor, levels = c("Less than $25,000", "$25,000 to $49,999","$50,000 to $74,999","$75,000 to $99,999", "$100,000 to $124,999", "$125,000 and more"))
+clean_data$income_respondent <- color_factor
+```
+
+```{r, echo=FALSE}
+s1 <- summary(clean_data$income_respondent)
+s2 <- summary(clean_data$total_children)
+s2_df <- data.frame(x=matrix(s2),row.names=names(s2))
+s3 <- summary(clean_data$age)
+s3_df <- data.frame(x=matrix(s3),row.names=names(s3))
+s4 <- summary(clean_data$marital_status)
+kables(
+  list(
+    kable(s1,col.names = "Respondent Count", valign='t'),
+    kable(s2_df, valign='t', col.names = "Number of Children"), 
+    kable(s3_df, valign='t', col.names = "Age"),
+    kable(s4,col.names = "Respondent Count", valign='t')
+  ),
+  caption = "Descriptive Summary of Age, Number of Children, Marital Status, and Income"
+)
+```
+  
+```{r, echo=FALSE}
+p <- ggplot(clean_data, aes(x=age, y=total_children)) + geom_point(aes(colour = color_factor))+ labs(title="Figure 1", color='Income Brackets', x = "Age", y = "Total Number of Children") + facet_wrap(~marital_status)+scale_colour_manual("Respondent Income Bracket", values = c("#000033", "#FF0000", "#FF9900", "blue", "#FF3399", "#33FF00"))+   theme(text=element_text(size=11,  family="Times"))
+g <- ggplot(clean_data, aes(total_children, fill=color_factor)) + geom_histogram(position ="identity", bins=8, center = 4) + facet_wrap(~marital_status) + labs(title="Figure 2", fill='Respondent Income Bracket', x = "Total Number of Children", y = "Respondent Count") + theme(text=element_text(size=11,  family="Times"))
+p
+g
+```
+
+Using GSS raw data that was collected and cleaned, Figure 1 shows a scatter plot of the raw data, with age and total number of children as variables, with colours separating different income brackets, under different marital status. Figure 2 shows how different marital status reflects how many children each respondent have. This visualizes the distribution of overall number of children by different income brackets in the raw data.
+
+## Model
+  
+  In this study, a multiple linear regression model is used to predict age of individuals based on their income, marital status, and total of children they have. 
+A mathematical expression of the multiple regression model is: 
+\begin{center} $y_{i}$ = $\beta_{0}$ + $\beta_{1}$$X_{i:25-49}$ + $\beta_{2}$$X_{inc:50-74}$ + $\beta_{3}$$X_{inc:75-99}$ + $\beta_{4}$$X_{inc100-124}$ + $\beta_{5}$$X_{inc:>125}$ + $\beta_{6}$$X_{children}$ + $\beta_{7}$$X_{mar:Married}$ \end{center} (1)
+
+```{r, echo=FALSE}
+df <- data.frame(Variable= c("$X_{i:25-49}$", "$X_{inc:50-74}$","$X_{inc:75-99}$", "$X_{inc:100-124}$", "$X_{inc:>125}$", "$X_{children}$", "$X_{mar:Married}$"), Definition = c("Respondent's income is between 25,000 and 49,999", "Respondent's income is between 50,000 and 74,999", "Respondent's income is between 75,000 and 99,999", "Respondent's income is between 100,000 and 124,999", "Respondent's income is more than 125,000", "Total number of children","Marital status: Married, Divorced, Living common-law, Separated, Widowed"))
+kable(df, caption="Definition of Each Variables In the Model")
+```
+
+In this model and the data collected, income of the respondent is categorical and is factorized during the modeling. From Equation (1), if the individual has annual income between 25,000 and 49,999, $X_{i:25-49}$ = 1, while other variables associate with income, such as $X_{i:50-74}$, will equal to 0. Similarly, marital status is also categorical variable; therefore, there is dummy variables $X_{mar:Single}$ and $X_{mar:Married}$. An important note that this model has done is modifying the marital status to be binary. That is, all statuses beside Single: never married, all fall with in Married category. This includes Married, Divorced, Living common-law, Separated, Widowed in marital status. For total number of children, it is discrete and not categorical variable. Therefore, there are no multiple dummy variables for total number of children.   
+ 
+## Results
+
+```{r, include=FALSE}
+model <- lm(clean_data$age ~ clean_data$income_respondent + clean_data$total_children + clean_data$marital_status)
+```
+
+```{r, echo=FALSE}
+df <- coef(summary(model))
+row_names <- c("Intercept","$X_{i:25-49}$", "$X_{inc:50-74}$","$X_{inc:75-99}$", "$X_{inc:100-124}$", "$X_{inc:>125}$", "$X_{children}$", "$X_{mar:Married}$")
+row.names(df) <- row_names
+kable(df, caption="Regression Coefficients of the Multiple Linear Regression")
+```
+
+```{r, echo=FALSE}
+lm_graph <- ggplot(clean_data, aes(y=age, x=total_children, colour=color_factor))+geom_point(alpha = 0.5)+
+  facet_wrap(~clean_data$marital_status, scales = "free")+ stat_smooth(method="lm", formula = y~x ,se=FALSE)+ labs(x ="Total number of children", y="Age") + scale_colour_manual("Respondent Income Bracket", values = c("#000033", "#FF0000", "#FF9900", "blue", "#FF3399", "#33FF00")) + ggtitle("Figure 3")+theme(text=element_text(size=11,  family="Times"))
+lm_graph
+````
+
+  From Table 3, the intercept is estimated to be 48.15, which means if a person has 0 child, and income of less than 25,000 and single, they are predicted to be 48 years old. $\beta_{1}$, which is the regression coefficient of the variable $X_{inc:>125}$, has a p-value of 0.29 that is greater than 0.05, which means that it is not significant different from other categories. However, it is important to note that the model should keep this category, as it does not make sense to throw away the "more than $125,000" income bracket. 
+
+## Discussion
+
+  By referring to Figure 3, the linear predictions for participants who are married are generally similar across all income brackets. This suggests generally people who are married will have more kids when they are older regardless of income. It is also important to note that for those who are married have more data points in higher total number of children, as it makes sense for those to form family with their partners. From the result, we can conclude several trends. First, most of participants who are married gradually have more children at around the same time, regardless of income. Marital status also seems to affect people with less than 25,000 annual income the most, as the regression lines have significant difference in Figure 3.
+  
+  A significant result from Figure 1: "Single, never married" is that those with less than 25,000 annual income are likely to have children at significantly older age. However, this regression line indicates a weakness of our model,there are little amount of data points in "Single, never married" with 4 or more children, and the prediction line for "less than 25,000" seems to be influenced by these small data points that can be potentially outliers. In addition, we can see that there is not enough information at all to make a regression line for "125,000 and more" in the same graph. On the other hand, for "Married", generally there are enough data points across each categories and discrete numbers. This suggests the GSS data does not have equal representation in each category, and with the lack of data points, this is certainly one of the weakness in the survey as well.
+  
+  There are many areas that can be improved on the study, data, and the model. First, the study can investigate similar questions through sampling the data. Then, the scatter plot will not be overload with thousands of data points. It is also possible to reduce and simplify the model to investigate each variable's effect. For example, we can have $y(i)$ = $\beta_{0}$ + $\beta_{1}$$X_{mar:Married}$ + $\beta_{2}$$X_{children}$, to predict the age of the participants through their marital status and number of children. The model will have less constraint and can potentially deliver new results. Further, the model assumes each variables are independent of each other; however, it is possible that there are confounding variables that influences the results of this study. The GSS data offers large variability that many other variables, such as aboriginal group, province, education level, can all be potential variables to explore the wellness of Canadians.  
+
+## References
+
+Alexander, R. (2020, May 17). Telling Stories With Data. Retrieved from https://www.tellingstorieswithdata.com/
+
+Faculty of Arts & Science, University of Toronto. (26, January 2017). Computing in the Humanities and Social Sciences. Retrieved from http://www.chass.utoronto.ca/
+
+Government of Canada, S. C. (2020, April 30). General Social Survey – Family (GSS). Retrieved from https://www.statcan.gc.ca/eng/survey/household/4501
+
+Wickham, H., & Grolemund, G. (2016). R for data science: import, tidy, transform, visualize, and model data. " O'Reilly Media, Inc.".
+
+Xie, Y., Dervieux, C., & Riederer, E. (2020). R Markdown Cookbook. CRC Press.
+
+
